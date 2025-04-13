@@ -43,15 +43,26 @@ public:
     void registerCallback(uint32_t can_id, const std::function<void(const MsgType &)> callback) {
         std::lock_guard<std::mutex> lock(mutex_);
         can_driver_.registerCallback(can_id, [callback,can_id,this](const std::vector<uint8_t> &frame_data) {
-            if (frame_data.size() < 2) return false;
+            if (frame_data.size() != 8) return false;
 
-            std::lock_guard<std::mutex> lock_callback(mutex_);
-
-            auto &buffer = buffer_map_[can_id];
             // NOTE：多帧拼接
-            uint8_t is_last = frame_data[1];
-            // buffer.insert(buffer.end(), frame_data.begin() + 2, frame_data.end());
-            // if (is_last) {
+            // uint8_t id = frame_data[0]
+            // uint8_t total_size = frame_data[1];
+            // size_t chunk_offset = id * 6;
+            //
+            // std::lock_guard<std::mutex> lock(mutex_);
+            // auto &buffer = buffer_map_[can_id];
+            // if (id == 0) {
+            //     receive_size_ = 0;
+            //     buffer.resize(total_size);
+            // }
+            //
+            // size_t chunk_size = std::min(size_t(6), total_size - chunk_offset);
+            // if (chunk_offset + chunk_size <= buffer.size()) {
+            //     std::memcpy(buffer.data() + chunk_offset, frame_data.data() + 2, chunk_size);
+            //     receive_size_ += chunk_size;
+            // }
+            // if (receive_size_ >= total_size) {
             //     if (buffer.size() != sizeof(MsgType)) {
             //         std::cerr << "Error: buffer size mismatch: " << buffer.size()
             //                 << " vs " << sizeof(MsgType) << std::endl;
@@ -62,11 +73,17 @@ public:
             //     MsgType msg;
             //     std::memcpy(&msg, buffer.data(), sizeof(MsgType));
             //
-            //     callback(msg);
+            //     //TODO：调用回调
+            //     //callback(msg);
+            //
+            //     receive_size_ = 0;
             //     buffer.clear();
             //     return true;
             // }
 
+            //NOTE：普通版本
+            std::lock_guard<std::mutex> lock_callback(mutex_);
+            auto &buffer = buffer_map_[can_id];
             buffer.insert(buffer.end(), frame_data.begin(), frame_data.end());
             if (buffer.size() != sizeof(MsgType)) {
                 std::cout << "Error: buffer size mismatch: " << buffer.size()
@@ -126,13 +143,23 @@ public:
     bool parseFrame(const uint32_t can_id, const std::vector<uint8_t> &frame_data) {
         if (frame_data.size() < 2) return false;
 
-        uint8_t is_last = frame_data[1];
+        uint8_t id = frame_data[0];
+        uint8_t total_size = frame_data[1];
+        size_t chunk_offset = id * 6;
 
         std::lock_guard<std::mutex> lock(mutex_);
         auto &buffer = buffer_map_[can_id];
-        buffer.insert(buffer.end(), frame_data.begin() + 2, frame_data.end());
+        if (id == 0) {
+            receive_size_ = 0;
+            buffer.resize(total_size);
+        }
 
-        if (is_last) {
+        size_t chunk_size = std::min(size_t(6), total_size - chunk_offset);
+        if (chunk_offset + chunk_size <= buffer.size()) {
+            std::memcpy(buffer.data() + chunk_offset, frame_data.data() + 2, chunk_size);
+            receive_size_ += chunk_size;
+        }
+        if (receive_size_ >= total_size) {
             if (buffer.size() != sizeof(MsgType)) {
                 std::cerr << "Error: buffer size mismatch: " << buffer.size()
                         << " vs " << sizeof(MsgType) << std::endl;
@@ -143,8 +170,10 @@ public:
             MsgType msg;
             std::memcpy(&msg, buffer.data(), sizeof(MsgType));
 
-            //NOTE：调用回调
+            //TODO：调用回调
+            //callback(msg);
 
+            receive_size_ = 0;
             buffer.clear();
             return true;
         }
@@ -155,6 +184,7 @@ public:
 private:
     CanDriver can_driver_;
 
+    size_t receive_size_ = 0;
     std::unordered_map<uint32_t, std::vector<uint8_t> > buffer_map_;
     std::mutex mutex_;
 };

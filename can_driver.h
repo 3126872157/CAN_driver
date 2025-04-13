@@ -42,7 +42,8 @@ public:
         //创建套接口 sock_fd
         int sock_fd = socket(AF_CAN, SOCK_RAW, CAN_RAW);
         if (sock_fd < 0) {
-            throw std::runtime_error("Failed to open CAN socket");
+            std::cout << "[Can Driver] " << "Failed to open CAN socket" << std::endl;
+            // throw std::runtime_error("Failed to open CAN socket");
         }
 
         //将套接字与 can 口绑定
@@ -50,7 +51,8 @@ public:
         strcpy(ifr.ifr_name, interface.c_str());
         if (ioctl(sock_fd, SIOCGIFINDEX, &ifr) < 0) {
             close(sock_fd);
-            throw std::runtime_error("Failed to get interface index");
+            std::cout << "[Can Driver] " << "Failed to get interface index" << std::endl;
+            // throw std::runtime_error("Failed to get interface index");
         }
         ifr.ifr_ifindex = if_nametoindex(ifr.ifr_name);
 
@@ -58,7 +60,8 @@ public:
         addr.can_family = AF_CAN;
         addr.can_ifindex = ifr.ifr_ifindex;
         if (bind(sock_fd, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0) {
-            throw std::runtime_error("Failed to bind CAN socket");
+            std::cout << "[Can Driver] " << "Failed to bind CAN socket" << std::endl;
+            // throw std::runtime_error("Failed to bind CAN socket");
         }
 
         //定义接收过滤规则，加这句就跑不通了，md
